@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Liga Petarung: Jalur Sang Juara</title>
+  <style>
+    /* ============================================================
+       GLOBAL VARIABLES & RESET
+    ============================================================ */
+    :root {
+      --bg-color: #121318;
+      --panel-color: #1c1e26;
+      --accent-color: #d97706;
+      --text-color: #f3f4f6;
+      
+      --hp-color: #22c55e;
+      --hp-bg: rgba(34, 197, 94, 0.15);
+      --qi-color: #3b82f6;
+      --qi-bg: rgba(59, 130, 246, 0.15);
+      --enemy-color: #ef4444;
+      --enemy-bg: rgba(239, 68, 68, 0.15);
+      
+      --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
+    
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: var(--font-main);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    #app-container {
+      width: 100%;
+      max-width: 480px;
+      height: 100vh;
+      background-color: var(--panel-color);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      box-shadow: 0 0 30px rgba(0,0,0,0.9);
+      overflow: hidden;
+    }
+
+    /* ============================================================
+       SCREEN SHAKE ANIMATIONS
+    ============================================================ */
+    @keyframes shakeLight { 0%,100%{transform:translate(0,0);} 25%{transform:translate(-2px,1px);} 50%{transform:translate(2px,-1px);} 75%{transform:translate(-1px,2px);} }
+    @keyframes shakeMedium { 0%,100%{transform:translate(0,0);} 20%{transform:translate(-5px,3px);} 40%{transform:translate(5px,-3px);} 60%{transform:translate(-4px,-2px);} 80%{transform:translate(4px,2px);} }
+    @keyframes shakeHeavy { 0%,100%{transform:translate(0,0) rotate(0);} 15%{transform:translate(-8px,5px) rotate(-1deg);} 30%{transform:translate(8px,-5px) rotate(1deg);} 45%{transform:translate(-6px,-4px) rotate(-0.8deg);} 60%{transform:translate(6px,4px) rotate(0.8deg);} 75%{transform:translate(-4px,2px) rotate(-0.5deg);} }
+    
+    .shake-light { animation: shakeLight 0.35s ease-out; }
+    .shake-medium { animation: shakeMedium 0.4s ease-out; }
+    .shake-heavy { animation: shakeHeavy 0.45s ease-out; }
+
+    /* ============================================================
+       FLOATING TEXT (DAMAGE & STAT)
+    ============================================================ */
+    @keyframes floatUp { 0%{opacity:1;transform:translateY(0) scale(0.8);} 30%{transform:translateY(-20px) scale(1.2);} 100%{opacity:0;transform:translateY(-100px) scale(0.6);} }
+    .floating-damage {
+      position: fixed; font-size: 2rem; font-weight: 900; pointer-events: none; z-index: 99999;
+      animation: floatUp 1.2s ease-out forwards; text-shadow: 0 2px 10px rgba(0,0,0,0.9);
+      font-family: 'Arial Black', sans-serif;
+    }
+    .floating-damage.dmg { color: var(--enemy-color); }
+    .floating-damage.heal { color: var(--hp-color); }
+
+    @keyframes statFloatUp { 0%{opacity:1;transform:translateY(0) scale(0.9);} 20%{transform:translateY(-10px) scale(1.1);} 100%{opacity:0;transform:translateY(-80px) scale(0.8);} }
+    .stat-float {
+      position: fixed; font-size: 1rem; font-weight: bold; pointer-events: none; z-index: 99999;
+      animation: statFloatUp 1.5s ease-out forwards; padding: 4px 10px; border-radius: 6px;
+      text-shadow: 0 2px 6px rgba(0,0,0,0.9); backdrop-filter: blur(4px);
+    }
+    .stat-float.positive { color: #4ade80; background: rgba(34,197,94,0.3); border: 1px solid #22c55e; }
+    .stat-float.negative { color: #f87171; background: rgba(239,68,68,0.3); border: 1px solid #ef4444; }
+
+    /* ============================================================
+       TOAST NOTIFICATION
+    ============================================================ */
+    #toast-container {
+      position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+      z-index: 99999; display: flex; flex-direction: column; gap: 10px;
+      pointer-events: none; width: calc(100% - 32px); max-width: 440px;
+    }
+    .toast {
+      padding: 14px 16px; border-radius: 10px; background: #1f2937; color: #f3f4f6;
+      font-size: 0.9rem; line-height: 1.5; box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+      border-left: 4px solid var(--accent-color); opacity: 0; transform: translateY(-20px) scale(0.95);
+      transition: opacity 0.3s, transform 0.3s; pointer-events: auto;
+    }
+    .toast.show { opacity: 1; transform: translateY(0) scale(1); }
+    .toast-success { border-left-color: var(--hp-color); }
+    .toast-error { border-left-color: var(--enemy-color); }
+    .toast strong { color: #fbbf24; display: block; margin-bottom: 2px; }
+
+    /* ============================================================
+       SCREENS & LAYOUT
+    ============================================================ */
+    .screen { display: none; flex-direction: column; width: 100%; height: 100%; position: absolute; inset: 0; background: var(--panel-color); }
+    .screen.active { display: flex; animation: fadeIn 0.4s ease-out; }
+    @keyframes fadeIn { from{opacity:0;} to{opacity:1;} }
+
+    /* Title Screen */
+    #title-screen {
+      justify-content: center; align-items: center; padding: 24px; text-align: center;
+      background: linear-gradient(180deg, rgba(0,0,0,0.8) 0%, var(--bg-color) 100%);
+      overflow-y: auto;
+    }
+    #title-screen h1 {
+      font-size: 2.4rem; color: var(--accent-color); margin-bottom: 8px;
+      text-transform: uppercase; letter-spacing: 3px; text-shadow: 0 4px 15px rgba(217,119,6,0.4);
+    }
+    #title-screen p { font-size: 0.95rem; opacity: 0.8; margin-bottom: 32px; letter-spacing: 1px; }
+    
+    .btn-main {
+      width: 100%; padding: 16px; margin-bottom: 12px; background-color: var(--accent-color);
+      color: #fff; border: none; border-radius: 10px; font-weight: bold; font-size: 1rem;
+      cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 15px rgba(217,119,6,0.3);
+    }
+    .btn-main:active { transform: scale(0.98); background-color: #b45309; }
+    .btn-main:disabled { background: #374151; cursor: not-allowed; box-shadow: none; opacity: 0.7; }
+
+    .episode-btn { display: flex; flex-direction: column; align-items: flex-start; text-align: left; }
+    .episode-btn .ep-synopsis { font-size: 0.8rem; font-weight: normal; opacity: 0.85; margin-top: 6px; line-height: 1.4; }
+    .episode-btn.episode-locked { background: #1f2937; border: 1px dashed #4b5563; color: #9ca3af; }
+
+    /* Game Screen Layout */
+    #game-screen { display: none; }
+    #game-screen.active { display: flex; flex-direction: column; height: 100%; }
+
+    /* Header */
+    #game-header {
+      padding: 12px 16px; background: rgba(0,0,0,0.5); border-bottom: 1px solid rgba(255,255,255,0.05);
+      display: flex; flex-direction: column; gap: 10px; z-index: 10;
+    }
+    .header-top { display: flex; justify-content: space-between; align-items: center; }
+    #episode-title { font-size: 0.9rem; font-weight: bold; color: var(--accent-color); letter-spacing: 1px; }
+    #audio-toggle { background: none; border: none; color: var(--text-color); font-size: 1.4rem; cursor: pointer; }
+    
+    .status-bars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .stat-box { background: rgba(0,0,0,0.4); padding: 8px; border-radius: 8px; font-size: 0.75rem; border: 1px solid rgba(255,255,255,0.05); }
+    .stat-label { display: flex; justify-content: space-between; margin-bottom: 6px; font-weight: bold; }
+    .bar-bg { width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; }
+    .bar-fill { height: 100%; background-color: var(--accent-color); width: 100%; transition: width 0.4s ease; }
+
+    /* Main Content */
+    #main-content { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+    #scene-visual { width: 100%; aspect-ratio: 16/9; border-radius: 10px; overflow: hidden; background: #000; display: none; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+    #scene-visual img { width: 100%; height: 100%; object-fit: cover; }
+    #location-name { font-size: 1.3rem; color: var(--accent-color); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px; }
+    #narrative-box { font-size: 0.95rem; line-height: 1.7; white-space: pre-line; flex-grow: 1; color: #d1d5db; }
+    #skip-btn { align-self: flex-end; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.15); color: var(--text-color); font-size: 0.75rem; padding: 6px 10px; border-radius: 6px; cursor: pointer; display: none; }
+
+    /* Action List */
+    #action-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+    .action-group-header { font-size: 0.75rem; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; padding: 8px 0 4px; margin-top: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); opacity: 0.8; }
+    .action-group-header.group-hub { color: #60a5fa; }
+    .action-group-header.group-exploration { color: #a3e635; }
+    .action-group-header.group-arena { color: #f87171; }
+    
+    .btn-action {
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); color: var(--text-color);
+      padding: 14px; border-radius: 8px; font-size: 0.9rem; text-align: left; cursor: pointer;
+      transition: all 0.2s; line-height: 1.4; display: flex; align-items: center; gap: 8px;
+    }
+    .btn-action:active { background: rgba(255,255,255,0.1); transform: scale(0.99); }
+    .btn-action-combat { border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.05); }
+    .btn-action-dialogue { border-color: rgba(59,130,246,0.4); background: rgba(59,130,246,0.05); }
+    .btn-action:disabled { opacity: 0.5; cursor: not-allowed; background: rgba(0,0,0,0.2); border-style: dashed; }
+    .req-hint { display: block; margin-top: 6px; font-size: 0.75rem; color: #fbbf24; font-weight: bold; }
+
+    /* Tabs & Modals */
+    #tab-bar { display: flex; background: rgba(0,0,0,0.6); border-top: 1px solid rgba(255,255,255,0.05); }
+    .tab-btn { flex: 1; padding: 12px; background: none; border: none; color: #6b7280; font-size: 0.8rem; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; transition: color 0.2s; }
+    .tab-btn.active { color: var(--accent-color); border-top: 2px solid var(--accent-color); background: linear-gradient(180deg, rgba(217,119,6,0.1) 0%, transparent 100%); }
+
+    .modal-panel { display: none; position: absolute; inset: 100px 0 50px 0; background: var(--panel-color); z-index: 20; padding: 20px; flex-direction: column; overflow-y: auto; }
+    .modal-panel.active { display: flex; animation: slideUp 0.3s ease-out; }
+    @keyframes slideUp { from{opacity:0; transform:translateY(20px);} to{opacity:1; transform:translateY(0);} }
+    .modal-panel h3 { color: var(--accent-color); margin-bottom: 12px; font-size: 1.2rem; }
+    
+    .grid-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 16px; }
+    .item-card { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); padding: 12px; border-radius: 8px; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; }
+    .item-card.selected { border-color: var(--accent-color); background: rgba(217,119,6,0.15); box-shadow: 0 0 10px rgba(217,119,6,0.2); }
+    .item-category { font-size: 0.7rem; color: #fbbf24; font-weight: bold; margin-top: 4px; letter-spacing: 0.5px; }
+
+    /* Ending Screen */
+    #ending-screen { justify-content: center; align-items: center; padding: 24px; text-align: center; background: #000; overflow-y: auto; z-index: 30; }
+    #ending-title { font-size: 1.6rem; color: var(--accent-color); margin-bottom: 16px; line-height: 1.3; }
+    #ending-desc { font-size: 0.95rem; line-height: 1.7; margin-bottom: 32px; color: #d1d5db; white-space: pre-line; }
+
+    /* ============================================================
+       TRANSITION SCREEN
+    ============================================================ */
+    #transition-screen {
+      position: absolute; inset: 0; background: #050508; z-index: 9000;
+      display: none; align-items: center; justify-content: center; padding: 32px 24px;
+      cursor: pointer; opacity: 0; transition: opacity 0.5s;
+    }
+    #transition-screen.active { display: flex; opacity: 1; }
+    .transition-content { text-align: center; max-width: 380px; transform: translateY(20px); transition: transform 0.5s; }
+    #transition-screen.active .transition-content { transform: translateY(0); }
+    .transition-icon { font-size: 2.5rem; margin-bottom: 20px; opacity: 0.5; }
+    .transition-text { font-size: 0.95rem; line-height: 1.8; color: #e5e7eb; font-style: italic; white-space: pre-line; text-align: left; margin-bottom: 32px; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+    .transition-hint { font-size: 0.75rem; color: #6b7280; letter-spacing: 2px; text-transform: uppercase; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:0.4;} 50%{opacity:1;} }
+
+    /* ============================================================
+       COMBAT HUD v5.0
+    ============================================================ */
+    #combat-hud {
+      display: none; position: absolute; inset: 0; background: linear-gradient(180deg, #0a0a0f 0%, #171721 100%);
+      z-index: 8000; flex-direction: column; padding: 16px; gap: 12px; overflow-y: auto;
+    }
+    #combat-hud.active { display: flex; animation: combatFadeIn 0.4s ease-out; }
+    @keyframes combatFadeIn { from{opacity:0; backdrop-filter:blur(0);} to{opacity:1; backdrop-filter:blur(5px);} }
+
+    .combat-top { display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    #combat-round-indicator { font-size: 0.85rem; color: #fbbf24; font-weight: bold; letter-spacing: 2px; }
+    #combat-enemy-name { font-size: 1rem; color: var(--enemy-color); font-weight: bold; text-shadow: 0 0 10px rgba(239,68,68,0.4); }
+
+    .combat-enemy-bars { background: var(--enemy-bg); border: 1px solid rgba(239,68,68,0.3); border-radius: 10px; padding: 12px; }
+    .bar-row { display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 6px; font-weight: bold; }
+    .bar-row.enemy { color: #fca5a5; }
+    .bar-row.player { color: #86efac; }
+    .bar-row.qi { color: #93c5fd; margin-top: 10px; }
+    
+    .hp-bar-bg { width: 100%; height: 10px; background: rgba(0,0,0,0.6); border-radius: 5px; overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5); }
+    .hp-bar-fill { height: 100%; border-radius: 5px; transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+    #combat-enemy-hp-fill { background: linear-gradient(90deg, #991b1b, #ef4444); width: 100%; box-shadow: 0 0 10px rgba(239,68,68,0.5); }
+    
+    .combat-player-panel { background: rgba(34,197,94,0.05); border: 1px solid rgba(34,197,94,0.2); border-radius: 10px; padding: 12px; }
+    #combat-player-hp-fill { background: linear-gradient(90deg, #166534, #22c55e); width: 100%; box-shadow: 0 0 10px rgba(34,197,94,0.5); }
+    #combat-player-qi-fill { background: linear-gradient(90deg, #1e3a8a, #3b82f6); width: 100%; box-shadow: 0 0 10px rgba(59,130,246,0.5); }
+
+    .postur-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 0.75rem; color: #9ca3af; }
+    .postur-dots { display: flex; gap: 4px; }
+    .postur-dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.3); }
+    .postur-dot.full { background: #fbbf24; border-color: #fbbf24; box-shadow: 0 0 5px rgba(251,191,36,0.5); }
+    .postur-dot.empty { background: transparent; }
+
+    .momentum-row { display: flex; justify-content: center; align-items: center; gap: 4px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 20px; margin: 4px 0; }
+    .momentum-dot { width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2); transition: all 0.3s; }
+    .momentum-dot.empty { background: transparent; }
+    .momentum-dot.pos.full { background: #fbbf24; border-color: #fbbf24; box-shadow: 0 0 5px #fbbf24; }
+    .momentum-dot.neg.full { background: #ef4444; border-color: #ef4444; box-shadow: 0 0 5px #ef4444; }
+    .momentum-sep { width: 2px; height: 12px; background: rgba(255,255,255,0.2); margin: 0 4px; }
+
+    #combat-narration { background: rgba(0,0,0,0.5); border-radius: 10px; padding: 16px; font-size: 0.9rem; line-height: 1.7; border: 1px solid rgba(255,255,255,0.05); flex: 1; overflow-y: auto; min-height: 120px; box-shadow: inset 0 0 20px rgba(0,0,0,0.3); }
+    .telegraph-text { color: #fde68a; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+    .outcome-text { color: #e5e7eb; font-style: italic; }
+
+    #combat-debuffs { display: flex; flex-wrap: wrap; gap: 6px; min-height: 20px; }
+    .debuff-badge { font-size: 0.7rem; padding: 4px 10px; border-radius: 12px; background: rgba(239,68,68,0.15); color: #fca5a5; border: 1px solid rgba(239,68,68,0.4); animation: pulse 2s infinite; }
+
+    #combat-options { display: flex; flex-direction: column; gap: 10px; padding-bottom: 20px; }
+    .combat-option { padding: 16px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04); color: var(--text-color); font-size: 0.9rem; text-align: left; cursor: pointer; line-height: 1.5; font-family: inherit; transition: all 0.2s; }
+    .combat-option:active { transform: scale(0.98); background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.3); }
+    .combat-option:disabled { opacity: 0.4; cursor: not-allowed; border-style: dashed; background: transparent; }
+    .combat-option .req-hint { display: block; margin-top: 8px; font-size: 0.75rem; color: #fbbf24; }
+
+    .combat-btn { padding: 16px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.08); color: var(--text-color); font-size: 0.95rem; font-weight: bold; cursor: pointer; font-family: inherit; transition: all 0.2s; }
+    .combat-btn:active { transform: scale(0.98); }
+    .combat-btn-wide { width: 100%; }
+    .combat-btn-success { background: rgba(34,197,94,0.15); border-color: #22c55e; color: #86efac; }
+    .combat-btn-danger { background: rgba(239,68,68,0.15); border-color: #ef4444; color: #fca5a5; animation: pulse 1.5s infinite; }
+
+    /* Combat Splash */
+    @keyframes splashIn { 0%{opacity:0;transform:scale(0.5);} 30%{opacity:1;transform:scale(1.05);} 70%{opacity:1;transform:scale(1);} 100%{opacity:0;transform:scale(1);} }
+    .combat-splash { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; animation: splashIn 1.8s ease-out forwards; pointer-events: none; backdrop-filter: blur(8px); }
+    .combat-splash.victory { background: radial-gradient(circle, rgba(22,163,74,0.85), rgba(0,0,0,0.95)); }
+    .combat-splash.defeat { background: radial-gradient(circle, rgba(220,38,38,0.85), rgba(0,0,0,0.95)); }
+    .splash-title { font-size: 3rem; font-weight: 900; color: #fff; text-shadow: 0 4px 30px rgba(0,0,0,0.9); letter-spacing: 3px; margin-bottom: 12px; }
+    .splash-sub { font-size: 1.1rem; color: rgba(255,255,255,0.9); text-align: center; padding: 0 20px; }
+
+    /* ============================================================
+       DIALOGUE OVERLAY
+    ============================================================ */
+    #dialogue-overlay { display: none; position: absolute; inset: 0; background: linear-gradient(180deg, #0f0f15 0%, #1a1a24 100%); z-index: 8500; flex-direction: column; padding: 20px; gap: 16px; overflow-y: auto; }
+    #dialogue-overlay.active { display: flex; animation: combatFadeIn 0.4s ease-out; }
+
+    .dialogue-header { display: flex; flex-direction: column; gap: 4px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    #dialogue-npc { font-size: 1.2rem; font-weight: bold; color: #fbbf24; }
+    #dialogue-personality { font-size: 0.8rem; color: #9ca3af; font-style: italic; }
+
+    #dialogue-expressions { display: flex; flex-direction: column; gap: 8px; padding: 12px; background: rgba(59,130,246,0.05); border-radius: 10px; border: 1px solid rgba(59,130,246,0.2); }
+    .micro-expr { font-size: 0.85rem; color: #93c5fd; line-height: 1.4; font-style: italic; }
+
+    #dialogue-narrative { background: rgba(0,0,0,0.4); border-radius: 10px; padding: 16px; font-size: 0.95rem; line-height: 1.7; color: #e5e7eb; white-space: pre-line; flex: 1; overflow-y: auto; min-height: 100px; }
+    .dialogue-outcome { color: #fde68a; font-style: italic; white-space: pre-line; }
+
+    #dialogue-options { display: flex; flex-direction: column; gap: 10px; padding-bottom: 20px; }
+    .dialogue-option { padding: 16px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04); color: var(--text-color); font-size: 0.9rem; text-align: left; cursor: pointer; line-height: 1.5; font-family: inherit; transition: all 0.2s; }
+    .dialogue-option:active { transform: scale(0.98); background: rgba(255,255,255,0.1); }
+    .dialogue-option:disabled { opacity: 0.4; cursor: not-allowed; border-style: dashed; }
+    .dialogue-option .req-hint { display: block; margin-top: 8px; font-size: 0.75rem; color: #fbbf24; }
+    .dialogue-continue { background: rgba(217,119,6,0.15); border-color: var(--accent-color); color: #fbbf24; font-weight: bold; text-align: center; }
+  </style>
+</head>
+<body>
+
+  <div id="app-container">
+
+    <!-- TITLE SCREEN -->
+    <div id="title-screen" class="screen active">
+      <h1 id="app-title">LIGA PETARUNG</h1>
+      <p>Dari Padepokan ke Puncak Dunia</p>
+      <div id="episode-list" style="width: 100%; margin-bottom: 24px;"></div>
+      <button id="btn-continue" class="btn-main" style="display:none; background-color: #2563eb;">Lanjutkan Progres</button>
+    </div>
+
+    <!-- GAME SCREEN -->
+    <div id="game-screen" class="screen">
+      <div id="game-header">
+        <div class="header-top">
+          <span id="episode-title">Episode 1</span>
+          <button id="audio-toggle">🔊</button>
+        </div>
+        <div class="status-bars" id="stats-container"></div>
+      </div>
+
+      <div id="main-content">
+        <div id="scene-visual"><img id="scene-img" src="" alt="Scene Visual"></div>
+        <h2 id="location-name">Lokasi</h2>
+        <div id="narrative-box"></div>
+        <button id="skip-btn">Lewati Teks ⏩</button>
+        <div id="action-list"></div>
+      </div>
+
+      <!-- Modals -->
+      <div id="inventory-panel" class="modal-panel">
+        <h3>🎒 Kitab & Inventaris</h3>
+        <div class="grid-list" id="inventory-list"></div>
+      </div>
+
+      <div id="crafting-panel" class="modal-panel">
+        <h3>⚗️ Meja Rakit</h3>
+        <p style="font-size:0.85rem; opacity:0.8; line-height:1.5;">Gabungkan item berdasarkan kategori:<br><strong>[HERBAL] + [PELENGKAP]</strong> = Jamu Pemulihan<br><strong>[KITAB] + [PERALATAN]</strong> = Taktik Jurus</p>
+        <div class="grid-list" id="craft-inventory-list"></div>
+        <button id="btn-execute-craft" class="btn-main" style="margin-top:20px;">Rakit Item</button>
+      </div>
+
+      <!-- Tabs -->
+      <div id="tab-bar">
+        <button class="tab-btn active" data-tab="main">🗺️<br>Eksplorasi</button>
+        <button class="tab-btn" data-tab="inventory">🎒<br>Inventaris</button>
+        <button class="tab-btn" data-tab="crafting">⚗️<br>Meja Rakit</button>
+      </div>
+    </div>
+
+    <!-- ENDING SCREEN -->
+    <div id="ending-screen" class="screen">
+      <h2 id="ending-title">HASIL AKHIR</h2>
+      <div id="ending-desc"></div>
+      <button id="btn-restart" class="btn-main">Kembali ke Menu Utama</button>
+    </div>
+
+    <!-- TRANSITION SCREEN -->
+    <div id="transition-screen">
+      <div class="transition-content">
+        <div class="transition-icon">🚶</div>
+        <div class="transition-text"></div>
+        <div class="transition-hint">Ketuk untuk melanjutkan</div>
+      </div>
+    </div>
+
+    <!-- COMBAT HUD -->
+    <div id="combat-hud">
+      <div class="combat-top">
+        <div id="combat-round-indicator">RONDE 1</div>
+        <div id="combat-enemy-name">Lawan</div>
+      </div>
+
+      <div class="combat-enemy-bars">
+        <div class="bar-row enemy">
+          <span>🥊 Stamina Lawan</span>
+          <span id="combat-enemy-hp-text">100/100</span>
+        </div>
+        <div class="hp-bar-bg"><div class="hp-bar-fill" id="combat-enemy-hp-fill"></div></div>
+        <div class="postur-row">
+          <span>Postur Lawan</span>
+          <div class="postur-dots" id="combat-enemy-postur"></div>
+        </div>
+      </div>
+
+      <div class="combat-player-panel">
+        <div class="bar-row player">
+          <span>🥊 Stamina</span>
+          <span id="combat-player-hp-text">100/100</span>
+        </div>
+        <div class="hp-bar-bg"><div class="hp-bar-fill" id="combat-player-hp-fill"></div></div>
+        
+        <div class="bar-row qi">
+          <span>🧘 Qi</span>
+          <span id="combat-player-qi-text">80/80</span>
+        </div>
+        <div class="hp-bar-bg"><div class="hp-bar-fill" id="combat-player-qi-fill"></div></div>
+
+        <div class="postur-row">
+          <span>Postur</span>
+          <div class="postur-dots" id="combat-player-postur"></div>
+        </div>
+      </div>
+
+      <div class="momentum-row" id="combat-momentum"></div>
+      <div id="combat-narration"></div>
+      <div id="combat-debuffs"></div>
+      <div id="combat-options"></div>
+    </div>
+
+    <!-- DIALOGUE OVERLAY -->
+    <div id="dialogue-overlay">
+      <div class="dialogue-header">
+        <div id="dialogue-npc">NPC</div>
+        <div id="dialogue-personality">Kepribadian: ...</div>
+      </div>
+      <div id="dialogue-expressions"></div>
+      <div id="dialogue-narrative"></div>
+      <div id="dialogue-options"></div>
+    </div>
+
+  </div>
+
+  <!-- Scripts -->
+  <script src="story_data.js"></script>
+  <script src="story_data2.js"></script>
+  <script src="engine.js"></script>
+</body>
+</html>
